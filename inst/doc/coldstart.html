@@ -142,15 +142,16 @@ table(it$set)
 pr
 #&gt; &lt;cs_predictor&gt; ridge, lambda = 1 | 400 legacy items | 10 families
 #&gt; predictive SD: 0.548 (seen family), 0.788 (unseen family)
+#&gt;   shared within family: 0.000 (seen), 0.559 (unseen)
 pred &lt;- predict(pr, sim$features[!tr, ], it$family[!tr])
 head(pred)
-#&gt;        item family       mean        sd family_seen
-#&gt; G0401 G0401    F07  1.3051977 0.5480338        TRUE
-#&gt; G0402 G0402    F08 -1.8811880 0.5480338        TRUE
-#&gt; G0403 G0403    F11 -0.4888554 0.7876555       FALSE
-#&gt; G0404 G0404    F09 -0.5278875 0.5480338        TRUE
-#&gt; G0405 G0405    F06 -0.1683571 0.5480338        TRUE
-#&gt; G0406 G0406    F02 -0.4489074 0.5480338        TRUE
+#&gt;        item family       mean        sd sd_shared family_seen
+#&gt; G0401 G0401    F07  1.3051977 0.5480338 0.0000000        TRUE
+#&gt; G0402 G0402    F08 -1.8811880 0.5480338 0.0000000        TRUE
+#&gt; G0403 G0403    F11 -0.4888554 0.7876555 0.5589692       FALSE
+#&gt; G0404 G0404    F09 -0.5278875 0.5480338 0.0000000        TRUE
+#&gt; G0405 G0405    F06 -0.1683571 0.5480338 0.0000000        TRUE
+#&gt; G0406 G0406    F02 -0.4489074 0.5480338 0.0000000        TRUE
 </code></pre>
 <p>The predictive SD is estimated out of sample. It is larger for a family never
 seen in training, because the family’s own effect is then unknown.</p>
@@ -175,6 +176,11 @@ c(baseline = sqrt(mean((cal$base_mean - truth)^2)),
 #&gt;  0.5752105  0.3839569
 </code></pre>
 <h2 id="sec:which-families-can-we-trust">Which families can we trust?</h2>
+<p>A prediction is only as good as the family template it comes from. If a
+template has drifted (the items are now harder or easier than the features
+say), every item of that family is mispredicted in the same direction.
+<code>cs_check()</code> compares the pretest estimates with the predictions, family by
+family, and flags families whose items conflict with their priors:</p>
 <pre><code class="language-r">fam &lt;- setNames(it$family[!tr], it$item[!tr])
 chk &lt;- cs_check(cs_calibrate(cs_responses(sim, 100, seed = 5), pred), fam)
 chk
@@ -186,13 +192,15 @@ chk
 #&gt; 4     F04       7  0.23966538 1.0288285 0.8571429 3.875306e-01        TRUE
 #&gt; 3     F03      12  0.19518559 1.0150236 0.8333333 4.169631e-01        TRUE
 #&gt; 8     F08      13  0.23874499 1.0076796 0.8461538 4.324513e-01        TRUE
+#&gt; 11    F11      19 -0.31884214 0.7773376 1.0000000 5.212788e-01        TRUE
 #&gt; 2     F02       9 -0.10144038 0.8624153 0.8888889 6.689603e-01        TRUE
 #&gt; 5     F05      15  0.32898050 0.8516693 0.9333333 7.610460e-01        TRUE
-#&gt; 11    F11      19 -0.31884214 0.7773376 1.0000000 9.066038e-01        TRUE
 #&gt; 10    F10      15 -0.08314448 0.7429080 1.0000000 9.121243e-01        TRUE
 unique(it$family[it$rogue])
 #&gt; [1] &quot;F01&quot;
 </code></pre>
+<p>The drifted family is flagged. The family that never appeared in training
+is not, even though its predictions are the least certain.</p>
 <p>Priors for families that fail the check are withdrawn before the final
 calibration:</p>
 <pre><code class="language-r">resp100 &lt;- cs_responses(sim, 100, seed = 5)
@@ -206,6 +214,49 @@ head(final[c(&quot;item&quot;, &quot;n&quot;, &quot;post_mean&quot;, &quot;post_
 #&gt; 5 G0405 100 -0.7933419 0.2231148
 #&gt; 6 G0406 100 -0.6901677 0.2011189
 </code></pre>
+<h3 id="sec:items-of-a-family-share-prediction-error">Items of a family share prediction error</h3>
+<p>Items of the same family do not err independently: they share the error in
+the family’s estimated effect. For a family unseen in training, the whole
+family effect is unknown, so all of its items are off by the same unknown
+amount. <code>predict()</code> reports this shared part as <code>sd_shared</code>, alongside each
+item’s total predictive SD:</p>
+<pre><code class="language-r">unique(pred[c(&quot;family_seen&quot;, &quot;sd&quot;, &quot;sd_shared&quot;)])
+#&gt;       family_seen        sd sd_shared
+#&gt; G0401        TRUE 0.5480338 0.0000000
+#&gt; G0403       FALSE 0.7876555 0.5589692
+</code></pre>
+<p>Since version 0.2.0, <code>cs_check()</code> tests each family’s conflicts under this
+correlation. Version 0.1.0 treated the items as independent, so a new family
+whose effect happened to sit away from the average could fail the check
+merely for being new, even when its predictions were as honest as they
+claimed. The difference is easy to see on a bank where that happens. Setting
+<code>prior_sd_shared</code> to zero reproduces the old, independent test:</p>
+<pre><code class="language-r">sim2 &lt;- cs_simulate(n_train = 400, n_new = 150, seed = 110)
+it2 &lt;- sim2$items; tr2 &lt;- it2$set == &quot;train&quot;
+pr2 &lt;- cs_predictor(it2$b_legacy[tr2], sim2$features[tr2, ], it2$family[tr2], seed = 10)
+pred2 &lt;- predict(pr2, sim2$features[!tr2, ], it2$family[!tr2])
+cal2 &lt;- cs_calibrate(cs_responses(sim2, 100, seed = 10), pred2)
+fam2 &lt;- setNames(it2$family[!tr2], it2$item[!tr2])
+c(unseen = unique(it2$family[it2$unseen_family]), drifted = unique(it2$family[it2$rogue]))
+#&gt;  unseen drifted 
+#&gt;   &quot;F11&quot;   &quot;F01&quot;
+
+correlated &lt;- cs_check(cal2, fam2)
+independent &lt;- cs_check(transform(cal2, prior_sd_shared = 0), fam2)
+correlated[!correlated$trustworthy, c(&quot;family&quot;, &quot;n_items&quot;, &quot;mean_z&quot;, &quot;p_value&quot;)]
+#&gt;   family n_items   mean_z      p_value
+#&gt; 1    F01      18 1.550548 2.661835e-07
+independent[!independent$trustworthy, c(&quot;family&quot;, &quot;n_items&quot;, &quot;mean_z&quot;, &quot;p_value&quot;)]
+#&gt;    family n_items    mean_z      p_value
+#&gt; 1     F01      18  1.550548 2.661835e-07
+#&gt; 11    F11      18 -1.309219 3.501922e-03
+</code></pre>
+<p>Both tests flag the drifted family. Only the independent test also flags
+the new family, whose items sit on average 1.3 SD below their predictions:
+the kind of common shift that <code>sd_shared</code> says to expect for a new family.
+In the package’s simulations, this correction lowered the rate at which the unseen family was
+falsely flagged from 3–7% to about 1% (at <code>alpha = 0.01</code>), while the
+drifted family was still detected. See <code>?cs_check</code> for the test.</p>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js" defer></script>

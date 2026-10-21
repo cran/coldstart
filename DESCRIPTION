@@ -1,7 +1,7 @@
 Package: coldstart
 Title: Calibrating Generated Items Before Pretesting with Predicted
         Priors
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: person("Daniel", "Edi", email = "danieledi2026@gmail.com", role = c("aut", "cre", "cph"),
     comment = c(ORCID = "0000-0001-5475-819X"))
 Description: Predicts Rasch item difficulty from item features (text
@@ -24,9 +24,9 @@ Suggests: knitr, markdown
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
 NeedsCompilation: no
-Packaged: 2026-09-28 00:35:55 UTC; User
+Packaged: 2026-10-21 01:38:32 UTC; User
 Author: Daniel Edi [aut, cre, cph] (ORCID:
     <https://orcid.org/0000-0001-5475-819X>)
 Maintainer: Daniel Edi <danieledi2026@gmail.com>
 Repository: CRAN
-Date/Publication: 2026-10-07 09:50:35 UTC
+Date/Publication: 2026-10-21 03:00:08 UTC

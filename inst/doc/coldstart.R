@@ -36,3 +36,20 @@ resp100 <- cs_responses(sim, 100, seed = 5)
 final <- cs_calibrate(resp100, cs_distrust(pred, chk))
 head(final[c("item", "n", "post_mean", "post_sd")])
 
+## -----------------------------------------------------------------------------
+unique(pred[c("family_seen", "sd", "sd_shared")])
+
+## -----------------------------------------------------------------------------
+sim2 <- cs_simulate(n_train = 400, n_new = 150, seed = 110)
+it2 <- sim2$items; tr2 <- it2$set == "train"
+pr2 <- cs_predictor(it2$b_legacy[tr2], sim2$features[tr2, ], it2$family[tr2], seed = 10)
+pred2 <- predict(pr2, sim2$features[!tr2, ], it2$family[!tr2])
+cal2 <- cs_calibrate(cs_responses(sim2, 100, seed = 10), pred2)
+fam2 <- setNames(it2$family[!tr2], it2$item[!tr2])
+c(unseen = unique(it2$family[it2$unseen_family]), drifted = unique(it2$family[it2$rogue]))
+
+correlated <- cs_check(cal2, fam2)
+independent <- cs_check(transform(cal2, prior_sd_shared = 0), fam2)
+correlated[!correlated$trustworthy, c("family", "n_items", "mean_z", "p_value")]
+independent[!independent$trustworthy, c("family", "n_items", "mean_z", "p_value")]
+
